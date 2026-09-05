@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Tessen Gaming Button</string>
+    <string name="accessibility_desc">Listens only for the ROG Tessen button so it can open your selected gaming frontend.</string>
+</resources>
