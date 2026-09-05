@@ -99,33 +99,21 @@ public class TessenButtonService extends AccessibilityService implements InputMa
     }
 
     private void setTessenConnected(boolean connected) {
-        if (tessenConnected == connected) {
-            ensureNoAccessibilityEvents();
-            return;
-        }
-
         tessenConnected = connected;
-        updateKeyFiltering(connected);
+        updateServiceMode(connected);
     }
 
-    private void ensureNoAccessibilityEvents() {
-        AccessibilityServiceInfo info = getServiceInfo();
-        if (info != null && info.eventTypes != 0) {
-            info.eventTypes = 0;
-            info.notificationTimeout = 0;
-            setServiceInfo(info);
-        }
-    }
-
-    private void updateKeyFiltering(boolean enabled) {
+    private void updateServiceMode(boolean controllerPresent) {
         AccessibilityServiceInfo info = getServiceInfo();
         if (info == null) return;
 
-        // Zero means Android does not deliver any Accessibility UI events to us.
+        // Never subscribe to UI or screen Accessibility events.
         info.eventTypes = 0;
         info.notificationTimeout = 0;
 
-        if (enabled) {
+        // When the Tessen is absent, Android does not send this service hardware
+        // key events at all. Only the event driven InputManager attach listener remains.
+        if (controllerPresent) {
             info.flags |= AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS;
         } else {
             info.flags &= ~AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS;
