@@ -1,9 +1,9 @@
-name: Build Tessen Probe
+name: Build Tessen Gaming Button
 
 on:
   push:
     branches:
-      - tessen-probe-build
+      - tessen-gaming-button
   workflow_dispatch:
 
 jobs:
@@ -31,5 +31,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: TessenProbe-debug-apk
+          name: TessenGamingButton-debug-apk
           path: TessenProbe/app/build/outputs/apk/debug/app-debug.apk
