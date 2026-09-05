@@ -1,37 +1,41 @@
 package com.kirbosh.tessenprobe;
 
 import android.app.Activity;
-import android.content.ClipData;
-import android.content.ClipboardManager;
-import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.Bundle;
-import android.os.SystemClock;
+import android.provider.Settings;
 import android.view.Gravity;
-import android.view.InputDevice;
-import android.view.KeyEvent;
-import android.view.MotionEvent;
 import android.view.ViewGroup;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import java.util.Locale;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
 
 public class MainActivity extends Activity {
+    private final List<AppEntry> apps = new ArrayList<>();
+    private Spinner appSpinner;
+    private CheckBox landscapeCheck;
     private TextView status;
-    private TextView logView;
-    private final StringBuilder report = new StringBuilder();
-    private long startedAt;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        startedAt = SystemClock.elapsedRealtime();
         buildUi();
-        appendHeader();
+        loadApps();
+        restoreSelection();
     }
 
     private int dp(float value) {
@@ -65,137 +69,126 @@ public class MainActivity extends Activity {
         root.setPadding(dp(20), dp(18), dp(20), dp(18));
         root.setBackgroundColor(bg);
 
-        TextView title = makeText("Tessen Probe", 28, primary);
+        TextView title = makeText("Tessen Gaming Button", 28, primary);
         title.setTypeface(title.getTypeface(), 1);
-        root.addView(title, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(title);
 
-        TextView instructions = makeText(
-                "Attach the ROG Tessen, then press the ROG button once. This app records the Android key event and controller identity. It uses no Accessibility service and no background service.",
-                16,
-                secondary
-        );
-        LinearLayout.LayoutParams instructionParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        instructionParams.topMargin = dp(10);
-        root.addView(instructions, instructionParams);
+        TextView desc = makeText("ROG button scan 319 is confirmed. Pick the frontend you want the button to open.", 16, secondary);
+        LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        dlp.topMargin = dp(10);
+        root.addView(desc, dlp);
 
-        status = makeText("Waiting for input…", 20, accent);
-        status.setPadding(dp(16), dp(16), dp(16), dp(16));
+        status = makeText("Setup needed", 18, accent);
+        status.setPadding(dp(14), dp(14), dp(14), dp(14));
         status.setBackgroundColor(card);
-        LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        statusParams.topMargin = dp(18);
-        root.addView(status, statusParams);
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        slp.topMargin = dp(18);
+        root.addView(status, slp);
 
-        LinearLayout buttons = new LinearLayout(this);
-        buttons.setOrientation(LinearLayout.HORIZONTAL);
-        buttons.setGravity(Gravity.CENTER_VERTICAL);
+        TextView choose = makeText("Frontend app", 16, primary);
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        clp.topMargin = dp(18);
+        root.addView(choose, clp);
 
-        Button copy = makeButton("Copy report");
-        copy.setOnClickListener(v -> copyReport());
-        buttons.addView(copy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        appSpinner = new Spinner(this);
+        root.addView(appSpinner, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        Button clear = makeButton("Clear");
-        clear.setOnClickListener(v -> {
-            report.setLength(0);
-            appendHeader();
-            status.setText("Waiting for input…");
+        landscapeCheck = new CheckBox(this);
+        landscapeCheck.setText("Force landscape when ROG is pressed");
+        landscapeCheck.setTextColor(primary);
+        landscapeCheck.setChecked(true);
+        LinearLayout.LayoutParams llp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        llp.topMargin = dp(12);
+        root.addView(landscapeCheck, llp);
+
+        Button save = makeButton("Save target");
+        save.setOnClickListener(v -> saveSettings());
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        blp.topMargin = dp(14);
+        root.addView(save, blp);
+
+        Button accessibility = makeButton("Enable Tessen button service");
+        accessibility.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+        LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        alp.topMargin = dp(8);
+        root.addView(accessibility, alp);
+
+        Button writeSettings = makeButton("Allow rotation control");
+        writeSettings.setOnClickListener(v -> {
+            Intent intent = new Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS);
+            intent.setData(Uri.parse("package:" + getPackageName()));
+            startActivity(intent);
         });
-        LinearLayout.LayoutParams clearParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        clearParams.leftMargin = dp(8);
-        buttons.addView(clear, clearParams);
+        LinearLayout.LayoutParams wlp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        wlp.topMargin = dp(8);
+        root.addView(writeSettings, wlp);
 
-        LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        buttonParams.topMargin = dp(12);
-        root.addView(buttons, buttonParams);
-
-        logView = makeText("", 14, primary);
-        logView.setTypeface(android.graphics.Typeface.MONOSPACE);
-        logView.setTextIsSelectable(true);
-        logView.setPadding(dp(14), dp(14), dp(14), dp(14));
-        logView.setBackgroundColor(card);
-
-        ScrollView scroll = new ScrollView(this);
-        scroll.addView(logView, new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
-        scrollParams.topMargin = dp(12);
-        root.addView(scroll, scrollParams);
+        TextView note = makeText("The service only checks hardware key events and ignores normal Accessibility events. It does not scan the screen or inspect app content.", 14, secondary);
+        note.setGravity(Gravity.START);
+        LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        nlp.topMargin = dp(16);
+        root.addView(note, nlp);
 
         setContentView(root);
-        root.setFocusableInTouchMode(true);
-        root.requestFocus();
     }
 
-    private void appendHeader() {
-        report.append("Tessen Probe 1.0\n");
-        report.append("Android API: ").append(android.os.Build.VERSION.SDK_INT).append("\n");
-        report.append("Device: ").append(android.os.Build.MANUFACTURER).append(" ").append(android.os.Build.MODEL).append("\n");
-        report.append("\nPress the ROG button once.\n\n");
-        refreshLog();
-    }
+    private void loadApps() {
+        PackageManager pm = getPackageManager();
+        Intent launcher = new Intent(Intent.ACTION_MAIN, null);
+        launcher.addCategory(Intent.CATEGORY_LAUNCHER);
+        List<android.content.pm.ResolveInfo> infos = pm.queryIntentActivities(launcher, 0);
 
-    @Override
-    public boolean dispatchKeyEvent(KeyEvent event) {
-        recordKeyEvent(event);
-        if (event.getScanCode() == 319) {
-            return true;
-        }
-        return super.dispatchKeyEvent(event);
-    }
-
-    private void recordKeyEvent(KeyEvent event) {
-        InputDevice input = event.getDevice();
-        String action = event.getAction() == KeyEvent.ACTION_DOWN ? "DOWN" : event.getAction() == KeyEvent.ACTION_UP ? "UP" : String.valueOf(event.getAction());
-        String keyName = KeyEvent.keyCodeToString(event.getKeyCode());
-        String source = String.format(Locale.US, "0x%08X", event.getSource());
-
-        StringBuilder block = new StringBuilder();
-        block.append("KEY EVENT\n");
-        block.append("action: ").append(action).append("\n");
-        block.append("keyCode: ").append(event.getKeyCode()).append(" (").append(keyName).append(")\n");
-        block.append("scanCode: ").append(event.getScanCode()).append("\n");
-        block.append("repeatCount: ").append(event.getRepeatCount()).append("\n");
-        block.append("source: ").append(source).append("\n");
-        block.append("deviceId: ").append(event.getDeviceId()).append("\n");
-        block.append("flags: ").append(String.format(Locale.US, "0x%08X", event.getFlags())).append("\n");
-        block.append("metaState: ").append(String.format(Locale.US, "0x%08X", event.getMetaState())).append("\n");
-
-        if (input != null) {
-            block.append("deviceName: ").append(input.getName()).append("\n");
-            block.append("descriptor: ").append(input.getDescriptor()).append("\n");
-            block.append("vendorId: ").append(input.getVendorId()).append("\n");
-            block.append("productId: ").append(input.getProductId()).append("\n");
-            block.append("deviceSources: ").append(String.format(Locale.US, "0x%08X", input.getSources())).append("\n");
-            block.append("external: ").append(input.isExternal()).append("\n");
+        apps.clear();
+        for (android.content.pm.ResolveInfo info : infos) {
+            String pkg = info.activityInfo.packageName;
+            if (pkg.equals(getPackageName())) continue;
+            CharSequence label = info.loadLabel(pm);
+            apps.add(new AppEntry(label == null ? pkg : label.toString(), pkg));
         }
 
-        block.append("timeSinceOpenMs: ").append(SystemClock.elapsedRealtime() - startedAt).append("\n\n");
-        report.append(block);
-
-        if (event.getScanCode() == 319) {
-            status.setText("ROG button captured ✓  scan 319  " + keyName);
-        } else {
-            status.setText("Captured " + keyName + "  scan " + event.getScanCode());
-        }
-        refreshLog();
+        Collections.sort(apps, Comparator.comparing(a -> a.label.toLowerCase()));
+        List<String> labels = new ArrayList<>();
+        for (AppEntry a : apps) labels.add(a.label + "  (" + a.packageName + ")");
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, labels);
+        appSpinner.setAdapter(adapter);
     }
 
-    @Override
-    public boolean dispatchGenericMotionEvent(MotionEvent event) {
-        InputDevice input = event.getDevice();
-        if (input != null && (event.getSource() & InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK) {
-            status.setText("Joystick motion seen from " + input.getName());
-        }
-        return super.dispatchGenericMotionEvent(event);
-    }
-
-    private void refreshLog() {
-        if (logView != null) {
-            logView.setText(report.toString());
+    private void restoreSelection() {
+        SharedPreferences prefs = getSharedPreferences("settings", MODE_PRIVATE);
+        String saved = prefs.getString("target_package", null);
+        landscapeCheck.setChecked(prefs.getBoolean("force_landscape", true));
+        if (saved != null) {
+            for (int i = 0; i < apps.size(); i++) {
+                if (apps.get(i).packageName.equals(saved)) {
+                    appSpinner.setSelection(i);
+                    status.setText("Ready for " + apps.get(i).label);
+                    return;
+                }
+            }
         }
     }
 
-    private void copyReport() {
-        ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-        clipboard.setPrimaryClip(ClipData.newPlainText("Tessen Probe report", report.toString()));
-        Toast.makeText(this, "Report copied. Paste it into ChatGPT.", Toast.LENGTH_LONG).show();
+    private void saveSettings() {
+        int pos = appSpinner.getSelectedItemPosition();
+        if (pos < 0 || pos >= apps.size()) {
+            Toast.makeText(this, "No app selected", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        AppEntry app = apps.get(pos);
+        getSharedPreferences("settings", MODE_PRIVATE).edit()
+                .putString("target_package", app.packageName)
+                .putBoolean("force_landscape", landscapeCheck.isChecked())
+                .apply();
+        status.setText("Ready for " + app.label);
+        Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show();
+    }
+
+    private static class AppEntry {
+        final String label;
+        final String packageName;
+        AppEntry(String label, String packageName) {
+            this.label = label;
+            this.packageName = packageName;
+        }
     }
 }
