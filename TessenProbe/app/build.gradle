@@ -7,7 +7,7 @@ android {
     compileSdk 35
 
     defaultConfig {
-        applicationId 'com.kirbosh.tessenprobe'
+        applicationId 'com.kirbosh.tessengamingbutton'
         minSdk 23
         targetSdk 35
         versionCode 1
